@@ -1,0 +1,44 @@
+WITH revenue_by_user AS (
+  SELECT
+    e.user_id,
+    SUM(
+      COALESCE(
+        p.value.float_value,
+        SAFE_CAST(p.value.int_value AS FLOAT64),
+        SAFE_CAST(p.value.string_value AS FLOAT64),
+        0
+      )
+    ) AS revenue
+  FROM `case-487318.events.events` e
+  JOIN UNNEST(e.properties) p
+  WHERE e.event_name IN ('subscribe', 'renewal')
+    AND p.key = 'revenue'
+  GROUP BY e.user_id
+),
+fb_users AS (
+  SELECT
+    user_id
+  FROM `case-487318.events.users`
+  WHERE LOWER(tracker_names[SAFE_OFFSET(0)].tracker_name) LIKE '%facebook%'
+),
+user_scan AS (
+  SELECT
+    fu.user_id,
+    EXISTS (
+      SELECT 1
+      FROM `case-487318.events.events` e
+      WHERE e.user_id = fu.user_id
+        AND e.event_name = 'scan_end'
+    ) AS scan_completed
+  FROM fb_users fu
+)
+SELECT
+  us.scan_completed,
+  COUNT(*) AS users,
+  ROUND(AVG(COALESCE(r.revenue, 0)), 2) AS avg_revenue_per_user,
+  ROUND(SUM(COALESCE(r.revenue, 0)), 2) AS total_revenue,
+  ROUND(SAFE_DIVIDE(COUNTIF(COALESCE(r.revenue, 0) > 0), COUNT(*)) * 100, 2) AS payer_rate_pct
+FROM user_scan us
+LEFT JOIN revenue_by_user r USING (user_id)
+GROUP BY us.scan_completed
+ORDER BY us.scan_completed DESC;
