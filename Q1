@@ -1,0 +1,20 @@
+SELECT
+  CASE
+    WHEN LOWER(u.tracker_names[SAFE_OFFSET(0)].tracker_name) LIKE '%facebook%' THEN 'Facebook'
+    WHEN LOWER(u.tracker_names[SAFE_OFFSET(0)].tracker_name) LIKE '%apple search ads%' THEN 'Apple Search'
+    WHEN LOWER(u.tracker_names[SAFE_OFFSET(0)].tracker_name) = 'organic' THEN 'Organic'
+  END AS Platform,
+  ROUND(SUM(p.value.float_value), 2) AS Revenue
+FROM `case-487318.events.events` e
+JOIN `case-487318.events.users` u
+  ON u.user_id = e.user_id
+JOIN UNNEST(e.properties) p
+WHERE e.event_name IN ('subscribe', 'renewal')
+  AND p.key = 'revenue'
+  AND (
+    LOWER(u.tracker_names[SAFE_OFFSET(0)].tracker_name) LIKE '%facebook%'
+    OR LOWER(u.tracker_names[SAFE_OFFSET(0)].tracker_name) LIKE '%apple search ads%'
+    OR LOWER(u.tracker_names[SAFE_OFFSET(0)].tracker_name) = 'organic'
+  )
+GROUP BY Platform
+ORDER BY Revenue DESC;
